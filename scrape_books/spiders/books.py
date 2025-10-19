@@ -1,8 +1,11 @@
 import re
-from typing import Generator
+from typing import Generator, Any
 
 import scrapy
+from scrapy import Request
 from scrapy.http import Response
+
+from scrape_books.items import ScrapeBooksItem
 
 
 class BooksSpider(scrapy.Spider):
@@ -27,8 +30,8 @@ class BooksSpider(scrapy.Spider):
             response: Response,
             *args,
             **kwargs
-    ) -> Generator[scrapy.Request, None, None] | None:
-        if self.count > self.limit:
+    ) -> Generator[Request, Any, None]:
+        if self.count >= self.limit:
             return
 
         next_page = response.css("li.next > a::attr(href)").get()
@@ -44,11 +47,9 @@ class BooksSpider(scrapy.Spider):
             response: Response,
             *args,
             **kwargs
-    ) -> Generator[scrapy.Request, None, None]:
+    ) -> Generator[ScrapeBooksItem, Any, None]:
         title = response.css(".product_main > h1::text").get()
-        description = response.xpath(
-            '//div[@class="sub-header"]/following-sibling::p[1]/text()'
-        ).get()
+        description = response.css("#product_description + p::text").get()
 
         price_text = response.css(".product_main > .price_color::text").get()
         price = float(price_text.replace("£", "")) if price_text else "N/A"
@@ -65,20 +66,21 @@ class BooksSpider(scrapy.Spider):
         if table:
             upc = table[0].css("td::text").get()
             stock_text = table[5].css("td::text").get()
+            m = re.search(r"\((\d+)", stock_text)
             stock = int(
-                re.search(r"\((\d+)", stock_text).group(1)
-            ) if stock_text else "N/A"
+                m.group(1)
+            ) if m else "N/A"
         else:
             upc = "N/A"
             stock = "N/A"
 
         self.count += 1
-        yield {
-            "title": title,
-            "price": price,
-            "amount_in_stock": stock,
-            "rating": rating,
-            "category": category,
-            "description": description,
-            "upc": upc,
-        }
+        yield ScrapeBooksItem(
+            title=title,
+            price=price,
+            amount_in_stock=stock,
+            rating=rating,
+            category=category,
+            description=description,
+            upc=upc,
+        )
