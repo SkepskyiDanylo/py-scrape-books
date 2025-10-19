@@ -27,12 +27,13 @@ class BooksSpider(scrapy.Spider):
             response: Response,
             *args,
             **kwargs
-    ) -> Generator[scrapy.Request, None, None]:
+    ) -> Generator[scrapy.Request, None, None] | None:
+        if self.count > self.limit:
+            return
+
         next_page = response.css("li.next > a::attr(href)").get()
 
         for book in response.css(".product_pod"):
-            if self.count < self.limit:
-                continue
             book_url = book.css("h3 > a::attr(href)").get()
             yield response.follow(book_url, callback=self.parse_book)
         if next_page:
@@ -45,7 +46,9 @@ class BooksSpider(scrapy.Spider):
             **kwargs
     ) -> Generator[scrapy.Request, None, None]:
         title = response.css(".product_main > h1::text").get()
-        description = response.css("p::text").get()
+        description = response.xpath(
+            '//div[@class="sub-header"]/following-sibling::p[1]/text()'
+        ).get()
 
         price_text = response.css(".product_main > .price_color::text").get()
         price = float(price_text.replace("£", "")) if price_text else "N/A"
@@ -69,6 +72,7 @@ class BooksSpider(scrapy.Spider):
             upc = "N/A"
             stock = "N/A"
 
+        self.count += 1
         yield {
             "title": title,
             "price": price,
